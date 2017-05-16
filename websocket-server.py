@@ -51,6 +51,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import pickle
 import openface
+from FaceDetection import FaceDetection
 
 modelDir = os.path.join(fileDir, '..', '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
@@ -105,39 +106,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         super(OpenFaceServerProtocol, self).__init__()
         if args.unknown:
             self.unknownImgs = np.load("./examples/web/unknown.npy")
-        self.fontFace = cv2.FONT_HERSHEY_SIMPLEX
-        self.fontScale = 0.5
-        self.fontThickness = 1
-        self.textBaseline = 0
+        self.faceDetection = FaceDetection(cuda=False);
         
-    def drawBox(self, rgbImg, bb, person, confidence):
-        #Draw bounding box first
-        cv2.rectangle(rgbImg,
-                (bb.left(), bb.bottom()), (bb.right(), bb.top()),
-                (127, 255, 212),
-                4)
-        #Calculate text length
-        textSize = cv2.getTextSize(
-                '{}-{:.2f}'.format(person.decode('utf-8'), confidence),
-                    self.fontFace, self.fontScale, self.fontThickness)[0]
-        #Draw the text background
-        cv2.rectangle(rgbImg,
-                (bb.left(), bb.top()),
-                (bb.left() + textSize[0], bb.top() -textSize[1]),
-                (127, 255, 212), -1);
-        #Now put the text on it
-        cv2.putText(rgbImg,
-                '{}-{:.2f}'.format(person.decode('utf-8'), confidence),
-                (bb.left(), bb.top()-1),
-                self.fontFace, self.fontScale,(0, 0, 0), self.fontThickness
-                )
-        return rgbImg
-
-    def drawBoxes (self, rgbImg, boxes, persons, confidences):
-        for box, person, confidence in zip(boxes, persons, confidences):
-            rgbImg = self.drawBox(rgbImg, box, person, confidence)
-        return rgbImg
-
     def onConnect(self, request):
         print("Client connecting: {0}".format(request.peer))
         self.training = True
@@ -170,53 +140,27 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         imgF.seek(0)
         img = Image.open(imgF)
 
-        buf = np.fliplr(np.asarray(img))
+        
         #TODO: Test this!
+        #buf = np.fliplr(np.asarray(img))
         #rgbFrame = np.zeros((300, 400, 3), dtype=np.uint8)
         #rgbFrame[:, :, 0] = buf[:, :, 2]
         #rgbFrame[:, :, 1] = buf[:, :, 1]
         #rgbFrame[:, :, 2] = buf[:, :, 0]
-        rgbFrame = buf
-        annotatedFrame = np.copy(buf)
+        rgbFrame = np.asarray(img)
+        annotatedFrame = np.copy(rgbFrame)
 
         # cv2.imshow('frame', rgbFrame)
         # if cv2.waitKey(1) & 0xFF == ord('q'):
         #     return
 
-        persons = []
-        confidences = []
-        boxes = []
-        # bbs = align.getAllFaceBoundingBoxes(rgbFrame)
-        bb = align.getLargestFaceBoundingBox(rgbFrame)
-        bbs = [bb] if bb is not None else []
-        for bb in bbs:
-            # print(len(bbs))
-            landmarks = align.findLandmarks(rgbFrame, bb)
-            alignedFace = align.align(args.imgDim, rgbFrame, bb,
-                                      landmarks=landmarks,
-                                      landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
-            if alignedFace is None:
-                continue
-            rep = net.forward(alignedFace)
-            # print(rep)
-            rep = r[1].reshape(1, -1)
-            bbx = r[0]
-            start = time.time()
-            predictions = clf.predict_proba(rep).ravel()
-            maxI = np.argmax(predictions)
-            person = le.inverse_transform(maxI)
-            confidence = predictions[maxI]
-            
-            persons.append(person)
-            confidences.append(confidence)
-            boxes = boxes.append(bb)
-        
-        annotatedFrame = self.drawBoxes(annotatedFrame, boxes, persons, confidences)
-        msg = {
-            "type": "PERSONS",
-            "identities": persons
-        }
-        self.sendMessage(json.dumps(msg))
+        # bbs = align.getAllFaceBoundingBoxes(rgbFrame)     
+        annotatedFrame = self.faceDetection.infer(annotatedFrame)
+        #msg = {
+        #    "type": "PERSONS",
+        #    "identities": persons
+        #}
+        #self.sendMessage(json.dumps(msg))
 
         plt.figure()
         plt.imshow(annotatedFrame)
