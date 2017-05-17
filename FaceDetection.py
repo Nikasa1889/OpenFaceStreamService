@@ -112,7 +112,7 @@ class FaceDetection():
             rgbImg = self.drawBox(rgbImg, bb, person, confidence)
         return rgbImg
 
-    def infer(self, rgbImg, multiple=True):
+    def infer(self, rgbImg, bbs=None, multiple=True):
         with open(self.classifierModel, 'rb') as f:
             if sys.version_info[0] < 3:
                     (le, clf) = pickle.load(f)
@@ -120,8 +120,8 @@ class FaceDetection():
                     (le, clf) = pickle.load(f, encoding='latin1')
     
         print("====================================")
-
-        bbs = self.getFaceBBs(rgbImg, multiple)
+        if (not bbs):
+            bbs = self.getFaceBBs(rgbImg, multiple)
         reps = self.getReps(rgbImg, bbs, multiple)
         if len(reps) > 1:
             print("List of faces in image from left to right")

@@ -51,6 +51,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import pickle
 import openface
+import dlib
 from FaceDetection import FaceDetection
 
 modelDir = os.path.join(fileDir, '..', '..', 'models')
@@ -125,13 +126,16 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         elif msg['type'] == "FRAME":
             self.processFrame(msg['dataURL'])
             self.sendMessage('{"type": "PROCESSED"}')
+        elif msg['type'] == "FRAME_WITH_BBS":   
+            self.processFrameWithBBs(msg['dataURL'], msg['bbs'])
+            self.sendMessage('{"type": "PROCESSED"}')
         else:
             print("Warning: Unknown message type: {}".format(msg['type']))
 
     def onClose(self, wasClean, code, reason):
         print("WebSocket connection closed: {0}".format(reason))
-
-    def processFrame(self, dataURL):
+    
+    def getImgFromDataURL(self, dataURL):
         head = "data:image/jpeg;base64,"
         assert(dataURL.startswith(head))
         imgdata = base64.b64decode(dataURL[len(head):])
@@ -139,17 +143,54 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         imgF.write(imgdata)
         imgF.seek(0)
         img = Image.open(imgF)
+        return np.asarray(img)
+    
+    def getDlibRectanglesFromBBs(self, bbs):
+        dlibRectangles = []
+        for bb in bbs:
+            dlibRectangles.append(dlib.rectangle(left=bb[0], top=bb[1], right=bb[2], bottom=bb[3]))
+        return dlibRectangles
+    
+    def convertImgToBase64(self, img):
+        plt.figure()
+        plt.imshow(img)
+        plt.xticks([])
+        plt.yticks([])
 
+        imgdata = StringIO.StringIO()
+        plt.savefig(imgdata, format='png')
+        imgdata.seek(0)
+        content = 'data:image/png;base64,' + \
+            urllib.quote(base64.b64encode(imgdata.buf))
+            
+        plt.close()
+        return content
         
-        #TODO: Test this!
+    def processFrameWithBBs(self, dataURL, bbs):
+        rgbFrame = self.getImgFromDataURL(dataURL)
+        annotatedFrame = np.copy(rgbFrame)
+        dlibRectangles = self.getDlibRectanglesFromBBs(bbs)
+        annotatedFrame = self.faceDetection.infer(annotatedFrame, bbs = dlibRectangles)
+        
+        content = self.convertImgToBase64(annotatedFrame)
+        msg = {
+            "type": "ANNOTATED",
+            "content": content
+        }
+        
+        self.sendMessage(json.dumps(msg))
+    
+    def processFrame(self, dataURL):
+        rgbFrame = self.getImgFromDataURL(dataURL)
+        annotatedFrame = np.copy(rgbFrame)
+        
+        #TODO: Test this! Tested, seems to no need those following lines
         #buf = np.fliplr(np.asarray(img))
         #rgbFrame = np.zeros((300, 400, 3), dtype=np.uint8)
         #rgbFrame[:, :, 0] = buf[:, :, 2]
         #rgbFrame[:, :, 1] = buf[:, :, 1]
         #rgbFrame[:, :, 2] = buf[:, :, 0]
-        rgbFrame = np.asarray(img)
-        annotatedFrame = np.copy(rgbFrame)
-
+        
         # cv2.imshow('frame', rgbFrame)
         # if cv2.waitKey(1) & 0xFF == ord('q'):
         #     return
@@ -161,22 +202,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         #    "identities": persons
         #}
         #self.sendMessage(json.dumps(msg))
-
-        plt.figure()
-        plt.imshow(annotatedFrame)
-        plt.xticks([])
-        plt.yticks([])
-
-        imgdata = StringIO.StringIO()
-        plt.savefig(imgdata, format='png')
-        imgdata.seek(0)
-        content = 'data:image/png;base64,' + \
-            urllib.quote(base64.b64encode(imgdata.buf))
+        content = self.convertImgToBase64(annotatedFrame)
+        
         msg = {
             "type": "ANNOTATED",
             "content": content
         }
-        plt.close()
+        
         self.sendMessage(json.dumps(msg))
 
 def main(reactor):
