@@ -24,11 +24,10 @@ txaio.use_twisted()
 
 from autobahn.twisted.websocket import WebSocketServerProtocol, \
     WebSocketServerFactory
-#from twisted.internet import task, defer
-#from twisted.internet.ssl import DefaultOpenSSLContextFactory
+from twisted.internet import task, defer
+from twisted.internet.ssl import DefaultOpenSSLContextFactory
 
 from twisted.python import log
-from twisted.internet import reactor
 
 import argparse
 import cv2
@@ -59,8 +58,8 @@ modelDir = os.path.join(fileDir, '..', '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
 # For TLS connections
-#tls_crt = os.path.join(fileDir, 'tls', 'server.crt')
-#tls_key = os.path.join(fileDir, 'tls', 'server.key')
+tls_crt = os.path.join(fileDir, 'tls', 'server.crt')
+tls_key = os.path.join(fileDir, 'tls', 'server.key')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dlibFacePredictor', type=str, help="Path to dlib's face predictor.",
@@ -105,7 +104,7 @@ class Face:
 
 class OpenFaceServerProtocol(WebSocketServerProtocol):
     def __init__(self):
-        #super(OpenFaceServerProtocol, self).__init__()
+        super(OpenFaceServerProtocol, self).__init__()
         if args.unknown:
             self.unknownImgs = np.load("./examples/web/unknown.npy")
         self.faceDetection = FaceDetection(cuda=False);
@@ -212,18 +211,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         
         self.sendMessage(json.dumps(msg))
 
-# def main(reactor):
-    # log.startLogging(sys.stdout)
-    # factory = WebSocketServerFactory()
-    # factory.protocol = OpenFaceServerProtocol
-    # ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
-    # reactor.listenSSL(args.port, factory, ctx_factory)
-    # return defer.Deferred()
+def main(reactor):
+    log.startLogging(sys.stdout)
+    factory = WebSocketServerFactory()
+    factory.protocol = OpenFaceServerProtocol
+    ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
+    reactor.listenSSL(args.port, factory, ctx_factory)
+    return defer.Deferred()
 
 if __name__ == '__main__':
-    #task.react(main)
-    log.startLogging(sys.stdout)
-    factory = WebSocketServerFactory("ws://localhost:{}".format(args.port), debug=False)
-    factory.protocol = OpenFaceServerProtocol
-    reactor.listenTCP(args.port, factory)
-    reactor.run()
+    task.react(main)
