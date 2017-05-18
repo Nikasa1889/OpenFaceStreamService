@@ -131,7 +131,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.processFrameWithBBs(msg['dataURL'], msg['bbs'])
             self.sendMessage('{"type": "PROCESSED"}')
         elif msg['type'] == "FACE_WITH_BBS":
-            self.processFaceArray(msg['face'], msg['bbs'])
+            self.processFaceWithBBS(msg['dataURL'], msg['bbs'])
         else:
             print("Warning: Unknown message type: {}".format(msg['type']))
 
@@ -171,11 +171,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         plt.close()
         return content
     
-    def processFace(self, face, bbs):
-        face_img = np.asarray(face)
+    def processFaceWithBBS(self, dataURL, bbs):
+        faceImg = self.getImgFromDataURL(dataURL)
+        faceImg = np.copy(faceImg)
         dlibRectangles = self.getDlibRectanglesFromBBs(bbs)
-        (persons, confidences) = self.faceDetection.infer(face_img, bbs=dlibRectangles, drawBox=False)
-        content = self.convertImgToBase64(face_img)
+        print(dlibRectangles)
+        print(faceImg.shape)
+        print(faceImg.shape[2])
+        (persons, confidences) = self.faceDetection.infer(faceImg, bbs=dlibRectangles, drawBox=False)
+        content = self.convertImgToBase64(faceImg)
         msg = {
             "type": "ANNOTATED",
             "content": content,
