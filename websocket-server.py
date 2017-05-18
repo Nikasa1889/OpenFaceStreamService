@@ -159,9 +159,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         plt.yticks([])
 
         imgdata = StringIO.StringIO()
-        plt.savefig(imgdata, format='png')
+        plt.savefig(imgdata, format='jpg')
         imgdata.seek(0)
-        content = 'data:image/png;base64,' + \
+        content = 'data:image/jpeg;base64,' + \
             urllib.quote(base64.b64encode(imgdata.buf))
             
         plt.close()
