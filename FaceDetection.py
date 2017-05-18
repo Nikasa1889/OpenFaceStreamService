@@ -42,7 +42,6 @@ class FaceDetection():
         self.net = openface.TorchNeuralNet(self.networkModel, imgDim=self.imgDim,
                                                   cuda=self.cuda)
 
-
     def getFaceBBs(self, rgbImg, multiple=True):
         start = time.time()
         align = self.align
@@ -112,7 +111,7 @@ class FaceDetection():
             rgbImg = self.drawBox(rgbImg, bb, person, confidence)
         return rgbImg
 
-    def infer(self, rgbImg, bbs=None, multiple=True):
+    def infer(self, rgbImg, bbs=None, drawBox=True, multiple=True):
         with open(self.classifierModel, 'rb') as f:
             if sys.version_info[0] < 3:
                     (le, clf) = pickle.load(f)
@@ -145,6 +144,8 @@ class FaceDetection():
                                                                              confidence))
             else:
                 print("Predict {} with {:.2f} confidence.".format(person.decode('utf-8'), confidence))
-            
-        return (self.drawBoxes(rgbImg, reps, persons, confidences))
+        if (drawBox):
+            return (self.drawBoxes(rgbImg, reps, persons, confidences))
+        else:
+            return (persons, confidences)
     

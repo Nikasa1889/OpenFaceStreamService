@@ -130,11 +130,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         elif msg['type'] == "FRAME_WITH_BBS":   
             self.processFrameWithBBs(msg['dataURL'], msg['bbs'])
             self.sendMessage('{"type": "PROCESSED"}')
+        elif msg['type'] == "FACE_WITH_BBS":
+            self.processFaceArray(msg['face'], msg['bbs'])
         else:
             print("Warning: Unknown message type: {}".format(msg['type']))
 
     def onClose(self, wasClean, code, reason):
         print("WebSocket connection closed: {0}".format(reason))
+    
     
     def getImgFromDataURL(self, dataURL):
         head = "data:image/jpeg;base64,"
@@ -161,11 +164,25 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         imgdata = StringIO.StringIO()
         plt.savefig(imgdata, format='jpg')
         imgdata.seek(0)
-        content = 'data:image/jpeg;base64,' + \
-            urllib.quote(base64.b64encode(imgdata.buf))
-            
+        #NOTE: do not use urllib.quote, this cause trouble with c++ base64 decode
+        #content = 'data:image/jpeg;base64,' + \
+        #    urllib.quote(base64.b64encode(imgdata.buf))
+        content = 'data:image/jpeg;base64,' + base64.b64encode(imgdata.buf)
         plt.close()
         return content
+    
+    def processFace(self, face, bbs):
+        face_img = np.asarray(face)
+        dlibRectangles = self.getDlibRectanglesFromBBs(bbs)
+        (persons, confidences) = self.faceDetection.infer(face_img, bbs=dlibRectangles, drawBox=False)
+        content = self.convertImgToBase64(face_img)
+        msg = {
+            "type": "ANNOTATED",
+            "content": content,
+            "persons": persons,
+            "confidences": confidences
+        }
+        self.sendMessage(json.dumps(msg))
         
     def processFrameWithBBs(self, dataURL, bbs):
         rgbFrame = self.getImgFromDataURL(dataURL)
@@ -184,25 +201,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def processFrame(self, dataURL):
         rgbFrame = self.getImgFromDataURL(dataURL)
         annotatedFrame = np.copy(rgbFrame)
-        
-        #TODO: Test this! Tested, seems to no need those following lines
-        #buf = np.fliplr(np.asarray(img))
-        #rgbFrame = np.zeros((300, 400, 3), dtype=np.uint8)
-        #rgbFrame[:, :, 0] = buf[:, :, 2]
-        #rgbFrame[:, :, 1] = buf[:, :, 1]
-        #rgbFrame[:, :, 2] = buf[:, :, 0]
-        
-        # cv2.imshow('frame', rgbFrame)
-        # if cv2.waitKey(1) & 0xFF == ord('q'):
-        #     return
-
-        # bbs = align.getAllFaceBoundingBoxes(rgbFrame)     
+           
         annotatedFrame = self.faceDetection.infer(annotatedFrame)
-        #msg = {
-        #    "type": "PERSONS",
-        #    "identities": persons
-        #}
-        #self.sendMessage(json.dumps(msg))
+
         content = self.convertImgToBase64(annotatedFrame)
         
         msg = {
